@@ -1,0 +1,263 @@
+import sys
+from PyQt5.QtWidgets import QWidget, QApplication, QPushButton, QDesktopWidget, QListWidget, QVBoxLayout, QLineEdit, \
+    QMessageBox, QLabel
+import json
+import binascii
+import json
+
+
+def dumping(login, password):
+    with open('file.txt', 'r') as f:
+        dumps = json.load(f)
+    dumps[login] = password
+    with open('file.txt', 'w') as f:
+        json.dump(dumps, f, indent=1)
+
+
+def loading():
+    with open('file.txt', 'r') as f:
+        dumps = json.load(f)
+    return dumps
+
+
+def cbinmove(s):
+    return s[-4:]+s[:-4]
+
+
+def xor(s, key):
+    return ''.join(['0' if s[i] == key[i] else '1' for i in range(len(key))])
+
+
+def binch(s, dictionary={}):
+    return dictionary[bytes(s, encoding='utf-8')]
+
+
+def encode(data, key):
+    d = {
+        b'0001': '0101',
+        b'0010': '0111',
+        b'0011': '1001',
+        b'0100': '1110',
+        b'0101': '0011',
+        b'0110': '1101',
+        b'0111': '0000',
+        b'1000': '1100',
+        b'1001': '0110',
+        b'1010': '1011',
+        b'1011': '0001',
+        b'1100': '1111',
+        b'1101': '1010',
+        b'1110': '0100',
+        b'1111': '1000',
+        b'0000': '0010'
+    }
+    key = ' '.join(format(ord(x), 'b') for x in key).replace(' ', '')
+    key = '0' * ((16 - len(key) % 16) % 16) + key
+    key_len = len(key)
+    data = binascii.hexlify(bytes(data, encoding='utf-8'))
+    data = ''.join(bin(int(data, 16))[2:])
+    data = '0' * (key_len - (len(data) % key_len)) + data
+    data = ''.join([cbinmove(data[x * 8: (x + 1) * 8]) for x in range(len(data) // 8)])
+    data = ''.join([binch(data[x*4:(x+1)*4], dictionary=d) for x in range(len(data) // 4)])
+    data = ''.join([xor(data[x*key_len:(x+1)*key_len], key) for x in range(len(data)//key_len)])
+    return data
+
+
+def decode(data, key):
+    d = {
+        b'0101': '0001',
+        b'0111': '0010',
+        b'1001': '0011',
+        b'1110': '0100',
+        b'0011': '0101',
+        b'1101': '0110',
+        b'0000': '0111',
+        b'1100': '1000',
+        b'0110': '1001',
+        b'1011': '1010',
+        b'0001': '1011',
+        b'1111': '1100',
+        b'1010': '1101',
+        b'0100': '1110',
+        b'1000': '1111',
+        b'0010': '0000'
+    }
+    key = ' '.join(format(ord(x), 'b') for x in key).replace(' ', '')
+    key = '0' * ((16 - len(key) % 16) % 16) + key
+    key_len = len(key)
+    data = ''.join([xor(data[x*key_len:(x+1)*key_len], key) for x in range(len(data)//key_len)])
+    data = ''.join([binch(data[x*4:(x+1)*4], dictionary=d) for x in range(len(data)//4)])
+    data = ''.join([cbinmove(data[x * 8:(x + 1) * 8]) for x in range(len(data) // 8)])
+    data = ''.join(hex(int(data, 2)))
+    data = binascii.unhexlify(data[2:])
+    try:
+        data = data.decode('utf-8')
+    except UnicodeDecodeError:
+        return 'Вы ввели неправильный пароль!!!'
+    return data
+
+
+class Example(QWidget):
+
+    def __init__(self):
+        super().__init__()
+        self.initui()
+
+    def initui(self):
+        self.setGeometry(400, 300, 900, 500)
+        frame_geometry = self.frameGeometry()
+        frame_center = QDesktopWidget().availableGeometry().center()
+        frame_geometry.moveCenter(frame_center)
+
+        self.show_list_button = QPushButton('Показать пароли', self)
+        self.show_list_button.setToolTip('Показать список сохранённых паролей')
+        self.show_list_button.move(350, 100)
+        self.show_list_button.clicked.connect(self.show_list)
+
+        self.add_password_button = QPushButton('Добавить пароль', self)
+        self.add_password_button.setToolTip('Внести новый пароль в базу')
+        self.add_password_button.move(350, 200)
+        self.add_password_button.clicked.connect(self.add_password)
+
+        self.move(frame_geometry.topLeft())
+        self.setWindowTitle('Password manager')
+        self.show()
+
+        self.menu_button = QPushButton('Меню', self)
+        self.menu_button.setToolTip('переход в меню')
+        self.menu_button.move(350, 300)
+        self.menu_button.clicked.connect(self.menu)
+
+        self.textbox = QLineEdit(self)
+        self.submit_button = QPushButton('Подтвердить', self)
+        self.add_submit_button = QPushButton('Подтвердить', self)
+        self.logintextbox = QLineEdit(self)
+        self.loginpasswordbox = QLineEdit(self)
+        self.loginkeybox = QLineEdit(self)
+        self.logintext = QLabel(self)
+        self.loginpassword = QLabel(self)
+        self.loginkey = QLabel(self)
+        self.submittext = QLabel(self)
+
+    def menu(self):
+        self.logintext.hide()
+        self.submittext.hide()
+        self.loginpassword.hide()
+        self.loginkey.hide()
+        self.logintextbox.hide()
+        self.loginkeybox.hide()
+        self.loginpasswordbox.hide()
+        self.add_submit_button.hide()
+        self.show_list_button.show()
+        self.add_password_button.show()
+        self.textbox.hide()
+        self.submit_button.hide()
+        self.menu_button.hide()
+
+    def show_list(self):
+        self.menu_button.show()
+        self.show_list_button.hide()
+        self.add_password_button.hide()
+        self.passwords = loading()
+        self.password_list = QListWidget()
+        self.password_list.addItems(self.passwords)
+        self.password_list.itemClicked.connect(self.selected_login)
+        self.password_list.show()
+        self.password_list.setWindowTitle('Password manager')
+        self.password_list.setGeometry(500, 400, 500, 300)
+        frame_geometry = self.password_list.frameGeometry()
+        frame_center = QDesktopWidget().availableGeometry().center()
+        frame_geometry.moveCenter(frame_center)
+
+        # vbox = QVBoxLayout()
+        # vbox.addWidget(self.password_list)
+        # self.setLayout(vbox)
+
+    def add_password(self):
+        self.menu_button.show()
+        self.show_list_button.hide()
+        self.add_password_button.hide()
+
+        self.logintext = QLabel(self)
+        self.logintext.setText('  Логин:')
+        self.logintext.move(300, 80)
+        self.logintext.show()
+        self.logintextbox = QLineEdit(self)
+        self.logintextbox.move(350, 80)
+        self.logintextbox.resize(280, 20)
+        self.logintextbox.show()
+
+        self.loginpassword = QLabel(self)
+        self.loginpassword.setText('Пароль:')
+        self.loginpassword.move(300, 110)
+        self.loginpassword.show()
+        self.loginpasswordbox = QLineEdit(self)
+        self.loginpasswordbox.move(350, 110)
+        self.loginpasswordbox.resize(280, 20)
+        self.loginpasswordbox.setEchoMode(QLineEdit.Password)
+        self.loginpasswordbox.show()
+
+        self.loginkey = QLabel(self)
+        self.loginkey.setText('   Ключ:')
+        self.loginkey.move(300, 140)
+        self.loginkey.show()
+        self.loginkeybox = QLineEdit(self)
+        self.loginkeybox.move(350, 140)
+        self.loginkeybox.resize(280, 20)
+        self.loginkeybox.setEchoMode(QLineEdit.Password)
+        self.loginkeybox.show()
+
+        self.add_submit_button = QPushButton('Подтвердить', self)
+        self.add_submit_button.move(350, 180)
+        self.add_submit_button.clicked.connect(self.inputed_password)
+        self.add_submit_button.show()
+
+    def selected_login(self, item):
+        self.submittext = QLabel(self)
+        self.submittext.setText('   Ключ:')
+        self.submittext.move(300, 40)
+        self.submittext.show()
+
+        self.login = item.text()
+        self.password_list.hide()
+        self.textbox = QLineEdit(self)
+        self.textbox.move(350, 40)
+        self.textbox.resize(280, 20)
+        self.textbox.setEchoMode(QLineEdit.Password)
+        self.textbox.show()
+        self.submit_button = QPushButton('Подтвердить', self)
+        self.submit_button.move(350, 80)
+        self.submit_button.clicked.connect(self.entered_password)
+        self.submit_button.show()
+
+    def inputed_password(self):
+        logintextboxValue = self.logintextbox.text()
+        loginpasswordboxValue = self.loginpasswordbox.text()
+        loginkeyboxValue = self.loginkeybox.text()
+        if logintextboxValue == '' or loginpasswordboxValue == '' or loginkeyboxValue == '':
+            QMessageBox.question(self, 'Message', "Не все данные введены!!!", QMessageBox.Ok, QMessageBox.Ok)
+        else:
+            QMessageBox.question(self, 'Message', "Пароль добавлен в базу.", QMessageBox.Ok, QMessageBox.Ok)
+            self.logintextbox.hide()
+            self.loginkeybox.hide()
+            self.loginpasswordbox.hide()
+            self.add_submit_button.hide()
+            dumping(logintextboxValue, encode(loginpasswordboxValue, loginkeyboxValue))
+            self.menu()
+
+    def entered_password(self):
+        textboxValue = self.textbox.text()
+        dumps = loading()
+        decoded_password = decode(dumps[self.login], textboxValue)
+        if decoded_password == 'Вы ввели неправильный пароль!!!':
+            QMessageBox.question(self, 'Message', "Вы ввели неправильный пароль!!!", QMessageBox.Ok, QMessageBox.Ok)
+        else:
+            QMessageBox.question(self, 'Message', "login: {} \npassword: {}".format(self.login, decoded_password), QMessageBox.Ok, QMessageBox.Ok)
+            self.menu()
+        self.textbox.setText("")
+
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    ex = Example()
+    sys.exit(app.exec_())
